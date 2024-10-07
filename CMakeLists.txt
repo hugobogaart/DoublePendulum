@@ -6,8 +6,8 @@ project(DoublePendulum)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 20)
 
-add_compile_options(-flto)
-add_link_options(-flto)
+add_compile_options()
+add_link_options()
 
 
 # Adding Raylib

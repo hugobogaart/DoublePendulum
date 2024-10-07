@@ -9,6 +9,7 @@
 #include "smath.h"
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 
 // func has signature Vector<T, N> -> Vector <T -> N>
@@ -228,6 +229,112 @@ private:
 
         std::mutex mtx;
         std::thread sim_runner;
+        size_t target_size = 10;
+        bool kill_thread = false;
+};
+
+
+class DPSimulationManager2 {
+public:
+        struct DataPoint {
+                DoublePendulumSimulation::State state;
+                size_t idx;
+        };
+
+        double seconds_per_tick;
+        DoublePendulumSimulation &sim;
+        std::vector<DataPoint> data_points;
+        size_t latest_idx = 0;
+
+        DPSimulationManager2 (DoublePendulumSimulation &simulation, double seconds_per_tick)
+                : sim(simulation), seconds_per_tick(seconds_per_tick)
+        {
+                DataPoint init_dp;
+                init_dp.idx = 0;
+                init_dp.state = sim.state;
+                data_points.push_back(init_dp);
+                launch();
+        }
+
+        ~DPSimulationManager2()
+        {
+                {
+                        std::lock_guard lg(mtx);
+                        kill_thread = true;
+                }
+                cv.notify_all();
+                sim_runner.join();
+        }
+
+        // sets the number of datapoints we want to have in the vector
+        void set_target_size (size_t n)
+        {
+                std::lock_guard lg(this->mtx);
+                target_size = n;
+                cv.notify_all();
+        }
+
+        DataPoint extract_data_point ()
+        {
+                // first we need to make sure there is a datapoint
+                std::unique_lock lk(this->mtx);
+                cv.wait(lk, [this]{return !data_points.empty();});
+
+                DataPoint dp = data_points.front();
+                data_points.erase(data_points.begin());
+
+                lk.unlock();
+                cv.notify_all();
+
+                return dp;
+        }
+
+private:
+
+        void launch ()
+        {
+                auto thread_loop = [this]() {
+
+                        while (true) {
+
+                                // we wait until we have work to do
+                                // or we notice we have to return
+
+                                bool ret;
+                                std::unique_lock lk(this->mtx);
+                                cv.wait(lk, [this, &ret]() -> bool {
+                                        ret = this->kill_thread;
+                                        return ret || (data_points.size() < target_size);
+                                });
+
+                                if (ret) {
+                                        lk.unlock();
+                                        cv.notify_all();
+                                        return;
+                                }
+
+                                // we have work to do
+                                // we run the sim and add it to the target
+
+                                sim.next_it(seconds_per_tick);
+                                ++latest_idx;
+                                DataPoint dp;
+                                dp.idx = latest_idx;
+                                dp.state = sim.state;
+                                data_points.push_back(dp);
+
+                                lk.unlock();
+                                cv.notify_all();
+                        }
+                };
+                sim_runner = std::thread(thread_loop);
+        }
+
+
+        std::mutex mtx;
+        std::thread sim_runner;
+        std::condition_variable cv;
+
         size_t target_size = 10;
         bool kill_thread = false;
 };

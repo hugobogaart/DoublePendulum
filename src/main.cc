@@ -105,7 +105,7 @@ int main()
         init_state.psi_deriv += random;
 
         DoublePendulumSimulation dsim(init_state, l1_metric, l2_metric, m1_metric, m2_metric);
-        DPSimulationManager sim_manager(dsim, target_spt);
+        DPSimulationManager2 sim_manager(dsim, target_spt);
         sim_manager.set_target_size(target_tps * 10);
 
         // return 0;
@@ -215,7 +215,7 @@ int main()
 
                 Vector2 rectV = rect_attachment_point + Vector2{.x = -rect_width_units / 2, .y = -rect_height_units};
 
-                std::array<DPSimulationManager::DataPoint, tpf> sim_data{};
+                std::array<DPSimulationManager2::DataPoint, tpf> sim_data{};
 
                 for (int i = 0; i < tpf; i++) {
                         sim_data[i] = sim_manager.extract_data_point();
